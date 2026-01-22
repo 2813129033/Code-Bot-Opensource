@@ -137,18 +137,19 @@ async function drawLottery(qqNumber) {
   try {
     await conn.beginTransaction();
 
-    // 必须先绑定邀请码
+    // 检查当前用户是否是邀请码所有者（即有人绑定了他的邀请码）
     const [bindingRows] = await conn.execute(
-      'SELECT code FROM invite_bindings WHERE invitee_qq_number = ? FOR UPDATE',
+      'SELECT code FROM invite_bindings WHERE inviter_qq_number = ? FOR UPDATE',
       [qq]
     );
     if (!bindingRows.length) {
       await conn.rollback();
       return { success: false, error: 'NOT_BOUND' };
     }
+    // 使用第一个绑定的邀请码（如果有多个，使用第一个）
     const code = String(bindingRows[0].code);
 
-    // 每人最多抽 2 次
+    // 邀请码所有者最多抽 2 次（对应最多2个人绑定他的邀请码）
     const [drawCntRows] = await conn.execute(
       'SELECT COUNT(1) AS cnt FROM lottery_draws WHERE qq_number = ? FOR UPDATE',
       [qq]
@@ -184,14 +185,14 @@ async function getUserLotteryInfo(qqNumber) {
   try {
     await conn.beginTransaction();
 
-    // 检查是否已绑定邀请码
+    // 检查是否有人绑定了当前用户的邀请码（即当前用户是否是邀请码所有者）
     const [bindingRows] = await conn.execute(
-      'SELECT code FROM invite_bindings WHERE invitee_qq_number = ? FOR UPDATE',
+      'SELECT code FROM invite_bindings WHERE inviter_qq_number = ? FOR UPDATE',
       [qq]
     );
     if (!bindingRows.length) {
       await conn.rollback();
-      return null; // 未绑定
+      return null; // 没有人绑定他的邀请码
     }
 
     // 获取抽奖次数

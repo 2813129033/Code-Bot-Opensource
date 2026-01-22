@@ -117,7 +117,7 @@ router.post('/', async (req, res) => {
           return res.json({
             reply:
               `🎟️ 您的邀请码：${info.code}\n` +
-              `规则：每个邀请码最多可被绑定 2 次；被邀请人绑定后可抽奖（最多2次）。\n` +
+              `规则：每个邀请码最多可被绑定 2 次；别人绑定您的邀请码后，您可获得抽奖机会（最多2次）。\n` +
               `当前余额：¥${wallet ? Number(wallet.balance).toFixed(2) : '0.00'}`
           });
         } catch (e) {
@@ -197,7 +197,7 @@ router.post('/', async (req, res) => {
           const draw = await inviteService.drawLottery(String(userId));
           if (!draw.success) {
             const map = {
-              NOT_BOUND: '您还未绑定邀请码。请先发送：绑定别人邀请码',
+              NOT_BOUND: '还没有人绑定您的邀请码，无法抽奖。',
               DRAW_LIMIT: '您已达到最多抽奖次数（2次）。',
             };
             return res.json({ reply: `❌ 抽奖失败：${map[draw.error] || '未知原因'}` });
