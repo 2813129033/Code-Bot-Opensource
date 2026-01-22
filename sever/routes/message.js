@@ -279,17 +279,6 @@ router.post('/', async (req, res) => {
     // 获取用户当前状态
     const userState = taskService.getUserState(userId);
 
-    // 处理 start 命令（保留兼容性）
-    if (message.toLowerCase() === 'start') {
-      if (userState.step !== taskService.STEPS.IDLE) {
-        return res.json({ reply: '您已有任务在进行中，请先完成当前任务或等待完成。' });
-      }
-      const taskId = taskService.startTask(userId);
-      console.log(`[task] 用户 ${userId} 开始任务录入，任务ID: ${taskId}`);
-      return res.json({ 
-        reply: '请选择项目类型并确保余额充足：\n1：H5 开发（¥200）\n2：APP 开发（¥400）' 
-      });
-    }
 
     // 处理任务录入流程
     if (userState.step === taskService.STEPS.WAIT_TYPE) {
