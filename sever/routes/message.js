@@ -370,7 +370,7 @@ router.post('/', async (req, res) => {
         .then(reply => {
           return axios.post(`${napcatUrl}/send_private_msg`, {
             user_id: userId,
-            message: reply
+            message: reply + '\n（发送"菜单"查看AI助手选项）'
           });
         })
         .then(() => {
