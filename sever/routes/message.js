@@ -100,6 +100,7 @@ router.post('/', async (req, res) => {
               `5️⃣ 论文小助手\n` +
               `6️⃣ 开始抽奖\n` +
               `7️⃣ 加盟赚钱\n` +
+              `8️⃣ 修改我的项目\n` +
               `═════════════════════\n` +
               `💰 当前余额：¥${wallet ? Number(wallet.balance).toFixed(2) : '0.00'}\n` +
               `🎫 邀请码：${inviteInfo ? inviteInfo.code : '未生成'}\n` +
@@ -226,6 +227,92 @@ router.post('/', async (req, res) => {
         return res.json({
           reply: '💼 加盟QQ：2813129033'
         });
+      }
+
+      if (message === '修改我的项目' || message === '修改项目') {
+        try {
+          const tasks = await taskService.getUserSentTasks(String(userId));
+          if (tasks.length === 0) {
+            return res.json({
+              reply: '❌ 您还没有已发送的项目，无法修改。\n请先完成一个项目构建。'
+            });
+          }
+
+          // 显示任务列表，让用户选择
+          let taskList = '📋 请选择要修改的项目（发送任务ID）：\n\n';
+          tasks.forEach((task, index) => {
+            taskList += `${index + 1}. 任务ID: ${task.task_id}\n`;
+            taskList += `   类型: ${task.task_type}\n`;
+            taskList += `   技术: ${task.task_technology}\n`;
+            taskList += `   创建时间: ${task.create_time}\n\n`;
+          });
+
+          taskService.setUserState(userId, {
+            step: 'WAIT_MODIFY_TASK_ID',
+            action: 'modify_project'
+          });
+
+          return res.json({ reply: taskList });
+        } catch (e) {
+          return res.json({ reply: '❌ 查询项目失败，请稍后再试。' });
+        }
+      }
+
+      // 处理修改项目：选择任务ID
+      const userState = taskService.getUserState(userId);
+      if (userState.step === 'WAIT_MODIFY_TASK_ID' && userState.action === 'modify_project') {
+        const taskId = message.trim();
+        try {
+          const tasks = await taskService.getUserSentTasks(String(userId));
+          const selectedTask = tasks.find(t => t.task_id === taskId);
+          
+          if (!selectedTask) {
+            return res.json({
+              reply: '❌ 任务ID不存在，请重新发送正确的任务ID。'
+            });
+          }
+
+          taskService.setUserState(userId, {
+            step: 'WAIT_MODIFY_REQUEST',
+            action: 'modify_project',
+            modifyTaskId: taskId
+          });
+
+          return res.json({
+            reply: `✅ 已选择任务：${taskId}\n\n请详细描述您需要修改的内容：\n（例如：添加登录功能、修改界面样式、增加数据导出功能等）`
+          });
+        } catch (e) {
+          return res.json({ reply: '❌ 处理失败，请稍后再试。' });
+        }
+      }
+
+      // 处理修改项目：输入修改需求
+      if (userState.step === 'WAIT_MODIFY_REQUEST' && userState.action === 'modify_project') {
+        const modifyRequest = message.trim();
+        const taskId = userState.modifyTaskId;
+
+        if (!modifyRequest || modifyRequest.length < 5) {
+          return res.json({
+            reply: '❌ 修改需求描述太短，请详细描述需要修改的内容（至少5个字符）。'
+          });
+        }
+
+        try {
+          const result = await taskService.saveModifyRequest(String(userId), taskId, modifyRequest);
+          
+          if (!result.success) {
+            return res.json({
+              reply: `❌ 保存修改需求失败：${result.error || '未知错误'}`
+            });
+          }
+
+          taskService.clearUserState(userId);
+          return res.json({
+            reply: `✅ 修改需求已提交！\n\n任务ID：${taskId}\n修改需求：${modifyRequest}\n\n系统将自动处理您的修改请求，完成后会通知您。`
+          });
+        } catch (e) {
+          return res.json({ reply: '❌ 保存失败，请稍后再试。' });
+        }
       }
     }
     // ==================== 菜单系统 END ====================

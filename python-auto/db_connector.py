@@ -20,7 +20,7 @@ def get_pending_tasks() -> List[Dict]:
     try:
         connection = pymysql.connect(**DB_CONFIG)
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            # 优先级：user_change > review_change > pending
+            # 优先级：pending_modify > user_change > review_change > pending
             sql = """
                 SELECT 
                     id, 
@@ -34,12 +34,13 @@ def get_pending_tasks() -> List[Dict]:
                     review_notes,
                     user_change_request
                 FROM user_task 
-                WHERE task_status IN ('pending', 'user_change', 'review_change')
+                WHERE task_status IN ('pending', 'user_change', 'review_change', 'pending_modify')
                 ORDER BY 
                   CASE task_status
-                    WHEN 'user_change' THEN 1
-                    WHEN 'review_change' THEN 2
-                    WHEN 'pending' THEN 3
+                    WHEN 'pending_modify' THEN 1
+                    WHEN 'user_change' THEN 2
+                    WHEN 'review_change' THEN 3
+                    WHEN 'pending' THEN 4
                     ELSE 9
                   END,
                   create_time ASC

@@ -170,6 +170,56 @@ async function completeTask(userId) {
   return { success: true, taskId: state.taskId };
 }
 
+/**
+ * 查询用户已发送的任务（可以修改的项目）
+ */
+async function getUserSentTasks(userId) {
+  try {
+    const db = await initDB();
+    const normalizedUserId = normalizeUserId(userId);
+    const [tasks] = await db.execute(
+      `SELECT task_id, task_type, task_technology, task_description, create_time
+       FROM user_task 
+       WHERE user_id = ? AND task_status = 'sent'
+       ORDER BY create_time DESC
+       LIMIT 10`,
+      [normalizedUserId]
+    );
+    return tasks;
+  } catch (err) {
+    console.error('[taskService][getUserSentTasks]', err);
+    return [];
+  }
+}
+
+/**
+ * 保存用户修改需求
+ */
+async function saveModifyRequest(userId, taskId, modifyRequest) {
+  try {
+    const db = await initDB();
+    const normalizedUserId = normalizeUserId(userId);
+    const [result] = await db.execute(
+      `UPDATE user_task 
+       SET task_status = 'pending_modify', 
+           user_change_request = ?,
+           updated_at = NOW(),
+           updated_by = ?
+       WHERE user_id = ? AND task_id = ? AND task_status = 'sent'`,
+      [modifyRequest, 'user', normalizedUserId, taskId]
+    );
+    
+    if (result.affectedRows === 0) {
+      return { success: false, error: '任务不存在或状态不正确' };
+    }
+    
+    return { success: true, taskId };
+  } catch (err) {
+    console.error('[taskService][saveModifyRequest]', err);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   STEPS,
   getUserState,
@@ -179,6 +229,8 @@ module.exports = {
   handleTypeSelection,
   handleTechSelection,
   handleDescription,
-  completeTask
+  completeTask,
+  getUserSentTasks,
+  saveModifyRequest
 };
 

@@ -190,13 +190,24 @@ def wait_for_project_completion():
 def generate_prompt(task):
     """
     根据任务信息生成提示词
+    区分新建项目和修改项目
     """
     user_id = task.get('user_id', '')
+    task_status = task.get('task_status', 'pending')
+    user_change_request = task.get('user_change_request', '')
     
-    prompt = (
-        f"在{user_id}文件夹按照开发文档和开发规范这俩个文档开始开发项目。"
-        f"最后将当前项目除文档之外的压缩到user_project_zip里面。"
-    )
+    # 如果是修改任务
+    if task_status == 'pending_modify' and user_change_request:
+        prompt = (
+            f"找到{user_id}项目，按照'{user_change_request}'开始修改。"
+            f"修改完成后将当前项目除文档之外的压缩到user_project_zip里面，如果覆盖不了就先删除之前的{user_id}.zip文件，然后再压缩进去。"
+        )
+    else:
+        # 新建项目
+        prompt = (
+            f"在{user_id}文件夹按照开发文档和开发规范这俩个文档开始开发项目。"
+            f"最后将当前项目除文档之外的压缩到user_project_zip里面。"
+        )
     return prompt
 
 def process_single_task(task, queue, task_number):
