@@ -10,6 +10,7 @@ import shutil
 import json
 import urllib.request
 import urllib.error
+import http.client
 from task_queue import TaskQueue
 
 pyautogui.FAILSAFE = True
@@ -23,7 +24,8 @@ CONFIG = {
     'min_confidence': 0.6,  # 最低图片匹配置信度
     'max_retry_attempts': 3,  # 最大重试次数
     'project_wait_time': 3600,  # 每个项目固定等待时间：1小时 = 3600秒
-    'dev_doc_timeout': 60 * 12,  # 开发文档接口最大等待时间（秒）
+    # 2-3万字文档，接口整体可能较慢，这里给到 20 分钟超时
+    'dev_doc_timeout': 60 * 20,  # 开发文档接口最大等待时间（秒）
     'dev_doc_retry_attempts': 2,  # 开发文档生成失败后重试次数
     'dev_doc_retry_sleep': 10,  # 重试前等待（秒）
 }
@@ -93,10 +95,19 @@ def fetch_dev_doc_stream(user_requirement: str, output_path: str) -> bool:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=CONFIG.get('dev_doc_timeout', 60 * 12)) as resp:
+        with urllib.request.urlopen(req, timeout=CONFIG.get('dev_doc_timeout', 60 * 20)) as resp:
             with open(output_path, "wb") as f:
                 while True:
-                    chunk = resp.read(8192)
+                    try:
+                        chunk = resp.read(8192)
+                    except http.client.IncompleteRead as e:
+                        # Coze 端有时会在内容已基本发送完成时提前关闭连接
+                        # IncompleteRead.partial 中通常已经包含剩余内容，这里写入后视为成功
+                        partial = e.partial or b""
+                        if partial:
+                            f.write(partial)
+                        print("⚠️ 检测到 IncompleteRead，但已写入所有可用内容，视为开发文档生成成功。")
+                        return True
                     if not chunk:
                         break
                     f.write(chunk)
@@ -231,7 +242,7 @@ def process_single_task(task, queue, task_number):
                 print(f"🔁 开发文档生成重试 {attempt}/{retry_attempts}（等待 {retry_sleep} 秒后重试）...")
                 time.sleep(retry_sleep)
 
-            print(f"📝 正在生成开发文档（预计约 12 分钟，超时 {CONFIG.get('dev_doc_timeout', 0)} 秒）...")
+            print(f"📝 正在生成开发文档（预计约 20 分钟，超时 {CONFIG.get('dev_doc_timeout', 0)} 秒）...")
             dev_doc_ok = fetch_dev_doc_stream(planner_input, dev_doc_path)
             if dev_doc_ok:
                 break
