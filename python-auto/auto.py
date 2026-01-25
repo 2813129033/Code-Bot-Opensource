@@ -126,9 +126,17 @@ def fetch_dev_doc_stream(user_requirement: str, output_path: str) -> bool:
 def wait_and_click(image_path, confidence=0.8, timeout=10, click_offset=(0, 0), silent=False):
     """
     在屏幕中查找指定图片并点击
+    使用动态扫描间隔：初始间隔较短，随着时间推移逐渐增加，减少CPU占用
     """
     start_time = time.time()
     attempt = 0
+    # 动态扫描间隔配置：初始0.3秒，逐渐增加到最大2秒
+    initial_interval = 0.3
+    max_interval = 2.0
+    interval_increase_threshold = 3.0  # 每3秒增加一次间隔
+    
+    current_interval = initial_interval
+    last_interval_increase_time = start_time
     
     while time.time() - start_time < timeout:
         try:
@@ -147,11 +155,21 @@ def wait_and_click(image_path, confidence=0.8, timeout=10, click_offset=(0, 0), 
         
         attempt += 1
         
-        if not silent and attempt % 10 == 0:
-            elapsed = int(time.time() - start_time)
-            print(f"   正在查找 {image_path}... ({elapsed}/{timeout}秒)")
+        # 动态调整扫描间隔：每3秒增加0.2秒，最多到2秒
+        current_time = time.time()
+        elapsed = current_time - start_time
+        time_since_last_increase = current_time - last_interval_increase_time
         
-        time.sleep(0.5)
+        if time_since_last_increase >= interval_increase_threshold:
+            if current_interval < max_interval:
+                current_interval = min(current_interval + 0.2, max_interval)
+                last_interval_increase_time = current_time
+        
+        if not silent and attempt % 10 == 0:
+            elapsed_int = int(elapsed)
+            print(f"   正在查找 {image_path}... ({elapsed_int}/{timeout}秒, 扫描间隔: {current_interval:.1f}秒)")
+        
+        time.sleep(current_interval)
     
     if not silent:
         print(f"❌ 未找到 {image_path} (超时: {timeout}秒)")
