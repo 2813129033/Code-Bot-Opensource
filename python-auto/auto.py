@@ -362,6 +362,7 @@ def process_single_task(task, queue, task_number):
 def scan_new_tasks(queue):
     """
     定时扫描数据库，添加新任务到队列
+    优化：使用单次 sleep 而不是循环，减少 CPU 占用
     """
     global running
     while running:
@@ -369,11 +370,16 @@ def scan_new_tasks(queue):
             queue.add_new_tasks()
         except Exception as e:
             print(f"❌ 扫描新任务时发生错误: {e}")
+            traceback.print_exc()  # 打印完整错误堆栈，便于调试
+        except Exception:
+            # 捕获所有异常，确保线程不会因为意外错误而退出
+            print(f"❌ 扫描新任务时发生未知错误")
+            traceback.print_exc()
         
-        for _ in range(SCAN_INTERVAL):
-            if not running:
-                break
-            time.sleep(1)
+        # 使用单次 sleep，在循环开始检查 running 状态
+        if not running:
+            break
+        time.sleep(SCAN_INTERVAL)
 
 def main():
     """
@@ -445,10 +451,18 @@ def main():
     except KeyboardInterrupt:
         print("\n\n⚠️  收到中断信号，正在停止...")
         running = False
+    except Exception as e:
+        # 捕获所有未预期的异常，确保程序不会意外退出
+        print(f"\n\n❌ 主循环发生未预期的错误: {e}")
+        traceback.print_exc()
+        running = False
     
     finally:
         running = False
-        scan_thread.join(timeout=2)
+        # 等待扫描线程结束，增加超时时间确保线程能正常退出
+        scan_thread.join(timeout=5)
+        if scan_thread.is_alive():
+            print("⚠️  扫描线程未能在超时时间内结束")
         
         print("\n" + "="*60)
         print("📊 最终统计信息")

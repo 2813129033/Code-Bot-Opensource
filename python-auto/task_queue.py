@@ -5,10 +5,16 @@ from db_connector import get_pending_tasks, update_task_status
 class TaskQueue:
     """任务队列管理器（支持线程安全的动态添加）"""
     
-    def __init__(self):
+    def __init__(self, max_processed_ids: int = 1000):
+        """
+        初始化任务队列
+        :param max_processed_ids: 最大保留的已处理任务ID数量，超过此数量会清理最旧的记录
+        """
         self.tasks: List[Dict] = []
         self.current_index = 0
         self.processed_task_ids = set()  # 记录已处理的任务ID，避免重复添加
+        self.processed_task_ids_list = []  # 用于记录添加顺序，实现FIFO清理
+        self.max_processed_ids = max_processed_ids  # 最大保留数量
         self.lock = threading.Lock()  # 线程锁，保证线程安全
     
     def load_tasks(self) -> int:
@@ -21,8 +27,8 @@ class TaskQueue:
             fetched = get_pending_tasks()
             self.tasks = list(fetched) if fetched is not None else []
             self.current_index = 0
-            # 初始化已处理任务ID集合
-            self.processed_task_ids = set()
+            # 保留已处理任务ID集合（不清空），但清理过大的集合
+            self._cleanup_processed_ids_if_needed()
             return len(self.tasks)
     
     def add_new_tasks(self) -> int:
@@ -63,8 +69,36 @@ class TaskQueue:
             # 记录已处理的任务ID
             task_id = task.get('task_id', '')
             if task_id:
-                self.processed_task_ids.add(task_id)
+                self._add_processed_task_id(task_id)
             return task
+    
+    def _add_processed_task_id(self, task_id: str) -> None:
+        """
+        添加已处理的任务ID，如果超过最大数量则清理最旧的记录
+        """
+        if task_id not in self.processed_task_ids:
+            self.processed_task_ids.add(task_id)
+            self.processed_task_ids_list.append(task_id)
+            # 如果超过最大数量，清理最旧的记录
+            if len(self.processed_task_ids) > self.max_processed_ids:
+                # 移除最旧的20%的记录
+                remove_count = max(1, self.max_processed_ids // 5)
+                for _ in range(remove_count):
+                    if self.processed_task_ids_list:
+                        old_id = self.processed_task_ids_list.pop(0)
+                        self.processed_task_ids.discard(old_id)
+    
+    def _cleanup_processed_ids_if_needed(self) -> None:
+        """
+        如果已处理任务ID集合过大，清理最旧的部分
+        """
+        if len(self.processed_task_ids) > self.max_processed_ids:
+            # 移除最旧的记录，保留最新的 max_processed_ids 个
+            remove_count = len(self.processed_task_ids) - self.max_processed_ids
+            for _ in range(remove_count):
+                if self.processed_task_ids_list:
+                    old_id = self.processed_task_ids_list.pop(0)
+                    self.processed_task_ids.discard(old_id)
     
     def has_more_tasks(self) -> bool:
         """检查是否还有更多任务"""
