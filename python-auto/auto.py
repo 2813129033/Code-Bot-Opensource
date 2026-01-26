@@ -28,6 +28,7 @@ CONFIG = {
     'dev_doc_timeout': 60 * 20,  # 开发文档接口最大等待时间（秒）
     'dev_doc_retry_attempts': 2,  # 开发文档生成失败后重试次数
     'dev_doc_retry_sleep': 10,  # 重试前等待（秒）
+    'token_check_interval': 60 * 5,  # Token 检测间隔：5分钟 = 300秒
 }
 # ===================================================
 
@@ -359,6 +360,122 @@ def process_single_task(task, queue, task_number):
         queue.mark_task_failed(task_id)
         return False
 
+def handle_token_exhausted():
+    """
+    处理 Token 耗尽，自动切换账号
+    流程：
+    1. 检测 Token 耗尽提示
+    2. 点击切换账号按钮
+    3. 等待2秒后点击确认切换
+    4. 等待5秒后点击切换完成
+    5. 检测输入框，输入"继续构建代码"并发送
+    """
+    try:
+        print("\n🔄 检测到 Token 耗尽，开始自动切换账号...")
+        
+        # Step 1: 点击切换账号按钮
+        print("📍 Step 1: 点击切换账号按钮...")
+        if not wait_and_click("btnimg/Switchaccount.png", confidence=CONFIG['min_confidence'], timeout=10):
+            print("⚠️  未找到切换账号按钮，可能 Token 提示已消失")
+            return False
+        
+        print("✅ 已点击切换账号按钮")
+        time.sleep(2)  # 等待2秒
+        
+        # Step 2: 点击确认切换按钮
+        print("📍 Step 2: 点击确认切换按钮...")
+        if not wait_and_click("btnimg/Confirmswitch.png", confidence=CONFIG['min_confidence'], timeout=10):
+            print("⚠️  未找到确认切换按钮")
+            return False
+        
+        print("✅ 已点击确认切换按钮")
+        time.sleep(5)  # 等待5秒
+        
+        # Step 3: 点击切换完成按钮
+        print("📍 Step 3: 点击切换完成按钮...")
+        if not wait_and_click("btnimg/Switchingcomplete.png", confidence=CONFIG['min_confidence'], timeout=10):
+            print("⚠️  未找到切换完成按钮")
+            return False
+        
+        print("✅ 已点击切换完成按钮")
+        time.sleep(2)  # 等待界面稳定
+        
+        # Step 4: 检测输入框并输入"继续构建代码"
+        print("📍 Step 4: 检测输入框并输入'继续构建代码'...")
+        if not wait_and_click("btnimg/input.png", confidence=CONFIG['min_confidence'], timeout=15):
+            print("⚠️  未找到输入框")
+            return False
+        
+        # 输入"继续构建代码"
+        try:
+            pyperclip.copy("继续构建代码")
+            time.sleep(0.5)
+            pyautogui.hotkey("ctrl", "a")
+            time.sleep(0.2)
+            pyautogui.press("delete")
+            time.sleep(0.3)
+            pyautogui.hotkey("ctrl", "v")
+            time.sleep(1)
+            print("✅ 已输入'继续构建代码'")
+        except Exception as e:
+            print(f"❌ 输入文本时发生错误: {e}")
+            return False
+        
+        # Step 5: 点击发送按钮
+        print("📍 Step 5: 点击发送按钮...")
+        if not wait_and_click("btnimg/send.png", confidence=CONFIG['min_confidence'], timeout=15):
+            print("⚠️  未找到发送按钮")
+            return False
+        
+        print("✅ 已点击发送按钮")
+        print("🎉 Token 切换完成，已发送'继续构建代码'指令\n")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 处理 Token 切换时发生错误: {e}")
+        traceback.print_exc()
+        return False
+
+def check_token_exhausted():
+    """
+    检测屏幕上是否有 Token 耗尽提示
+    返回 True 如果检测到，False 如果未检测到
+    """
+    try:
+        location = pyautogui.locateCenterOnScreen(
+            "btnimg/Tokensexhausted.png", 
+            confidence=CONFIG['min_confidence']
+        )
+        return location is not None
+    except pyautogui.ImageNotFoundException:
+        return False
+    except Exception:
+        return False
+
+def monitor_token_exhaustion():
+    """
+    后台线程：定期检测 Token 耗尽并自动切换账号
+    每5分钟检测一次
+    """
+    global running
+    while running:
+        try:
+            # 检测是否有 Token 耗尽提示（只检测，不点击）
+            if check_token_exhausted():
+                # 如果检测到 Token 耗尽提示，执行切换流程
+                handle_token_exhausted()
+        except Exception as e:
+            print(f"❌ Token 检测线程发生错误: {e}")
+            traceback.print_exc()
+        
+        # 等待检测间隔
+        for _ in range(CONFIG['token_check_interval']):
+            if not running:
+                break
+            time.sleep(1)
+    
+    print("🛑 Token 检测线程已停止")
+
 def scan_new_tasks(queue):
     """
     定时扫描数据库，添加新任务到队列
@@ -406,6 +523,11 @@ def main():
     scan_thread = threading.Thread(target=scan_new_tasks, args=(queue,), daemon=True)
     scan_thread.start()
     print(f"✅ 后台扫描线程已启动，每 {SCAN_INTERVAL} 秒扫描一次数据库\n")
+    
+    # 启动 Token 检测线程
+    token_monitor_thread = threading.Thread(target=monitor_token_exhaustion, daemon=True)
+    token_monitor_thread.start()
+    print(f"✅ Token 检测线程已启动，每 {CONFIG['token_check_interval']} 秒检测一次 Token 状态\n")
     
     success_count = 0
     fail_count = 0
