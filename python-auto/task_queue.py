@@ -123,7 +123,7 @@ class TaskQueue:
     def mark_task_processing(self, task_id: str) -> bool:
         """标记任务为处理中"""
         return update_task_status(task_id, 'processing')
-    
+
     def mark_task_completed(self, task_id: str) -> bool:
         """标记任务为已完成（保留接口，但当前工作流不再直接使用 completed）"""
         return update_task_status(task_id, 'completed')
@@ -132,7 +132,11 @@ class TaskQueue:
         """标记任务为待审核"""
         return update_task_status(task_id, 'review')
     
-    def mark_task_failed(self, task_id: str) -> bool:
+    def mark_task_failed(self, task_id: str, error_message: str = None) -> bool:
         """标记任务为失败"""
-        return update_task_status(task_id, 'failed')
+        return update_task_status(task_id, 'failed', error_message=error_message)
+    
+    def mark_task_retry(self, task_id: str, retry_count: int, error_message: str = None) -> bool:
+        """标记任务需要重试，更新重试次数并重置状态为 pending"""
+        return update_task_status(task_id, 'pending', retry_count=retry_count, error_message=error_message)
 

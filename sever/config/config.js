@@ -44,9 +44,9 @@ const appConfig = {
   // 压缩包查找路径配置（按优先级从高到低）
   const zipSearchPaths = [
 	// 主要路径：Python 自动化脚本输出的压缩包目录（项目根目录下）
-	'D:\\work\\Code-bot\\user_project_zip',
+	'C:\\AI-project\\cursor_bot\\user_project_zip',
 	// 备用路径：桌面 test 目录（兼容旧流程/手动测试）
-	'C:\\Users\\28131\\Desktop\\test',
+	'C:\\AI-project\\cursor_bot\\user_project_zip',
 	// 可以添加更多备用路径，例如：
 	// 'D:\\projects\\output',
   ];
