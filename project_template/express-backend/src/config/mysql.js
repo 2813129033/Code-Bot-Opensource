@@ -1,5 +1,6 @@
 const mysql = require('mysql2/promise');
 const logger = require('../utils/logger');
+const config = require('./index');
 
 let pool = null;
 
@@ -9,13 +10,13 @@ const createPool = () => {
   }
 
   pool = mysql.createPool({
-    host: process.env.MYSQL_HOST || 'localhost',
-    port: parseInt(process.env.MYSQL_PORT) || 3306,
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || '',
-    database: process.env.MYSQL_DATABASE || 'test',
+    host: config.mysql.host,
+    port: config.mysql.port,
+    user: config.mysql.user,
+    password: config.mysql.password,
+    database: config.mysql.database,
     waitForConnections: true,
-    connectionLimit: parseInt(process.env.MYSQL_CONNECTION_LIMIT) || 10,
+    connectionLimit: config.mysql.connectionLimit,
     queueLimit: 0,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
@@ -69,6 +70,10 @@ const getPool = () => {
 
 // 执行查询
 const query = async (sql, params = []) => {
+  // 开发规范提示（写 SQL 时常踩坑）：
+  // 1) 建库/建表前如果有外键，先执行：SET FOREIGN_KEY_CHECKS = 0;（创建完成后再改回 1）
+  // 2) 外键语法：ON DELETE SET NULL（不要写成 ON SET NULL）
+  // 3) 分页 LIMIT/OFFSET：优先把数字 parseInt 后拼接进 SQL，避免用占位符导致驱动/类型问题
   try {
     const connectionPool = getPool();
     const [results] = await connectionPool.execute(sql, params);

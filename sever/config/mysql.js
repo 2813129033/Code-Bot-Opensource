@@ -22,13 +22,11 @@ async function initDB() {
 
     // 测试连接是否可用
     const [rows] = await pool.query('SELECT 1');
-    if (rows) console.log('✅ MySQL connected');
 
     // 自动重连检测逻辑
     pool.on('error', (err) => {
       console.error('[mysql pool error]', err);
       if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-        console.log('🔁 Reconnecting MySQL...');
         initDB();
       } else {
         throw err;

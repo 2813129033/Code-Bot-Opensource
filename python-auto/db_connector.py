@@ -14,9 +14,13 @@ DB_CONFIG = {
     'database': 'cursorbot',
     'charset': 'utf8mb4',
     'connect_timeout': 10,  # 连接超时
-    'read_timeout': 30,  # 读取超时
-    'write_timeout': 30,  # 写入超时
-    'autocommit': False,  # 手动提交事务
+    'read_timeout': 30,     # 读取超时
+    'write_timeout': 30,    # 写入超时
+    # ✅ 关键修改：开启自动提交，避免长事务导致“看不到新插入的任务”
+    # 在 MySQL 的 REPEATABLE-READ 模式下，如果 autocommit=False 且一直复用同一个连接，
+    # 那么所有 SELECT 都会在同一个事务快照里，看不到其它会话之后插入的新行。
+    # 对于这个任务队列场景，我们不需要跨多条语句的事务，一条语句一提交最合适。
+    'autocommit': True,
 }
 
 # 连接池配置
@@ -112,10 +116,9 @@ def _get_connection():
             return _get_connection_from_pool()
         except Exception as e:
             if attempt < _MAX_RETRIES - 1:
-                print(f"⚠️  获取数据库连接失败（尝试 {attempt + 1}/{_MAX_RETRIES}）: {e}，{_RETRY_DELAY}秒后重试...")
                 time.sleep(_RETRY_DELAY)
             else:
-                print(f"❌ 获取数据库连接失败（已重试 {_MAX_RETRIES} 次）: {e}")
+                print(f"[ERROR] 获取数据库连接失败（已重试 {_MAX_RETRIES} 次）: {e}")
                 raise
     return None
 
@@ -137,7 +140,6 @@ def cleanup_connection_pool():
             break
     with _pool_lock:
         _created_connections = 0
-    print(f"✅ 连接池已清理，关闭了 {closed_count} 个连接")
 
 # 注册退出时清理连接池
 atexit.register(cleanup_connection_pool)
@@ -150,9 +152,12 @@ def get_pending_tasks() -> List[Dict]:
     connection = None
     try:
         connection = _get_connection()
+        if not connection:
+            print("[ERROR] 无法获取数据库连接")
+            return []
+            
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             # 优先级：pending_modify > user_change > review_change > pending
-            # 尝试查询 retry_count 字段，如果不存在则使用 0
             sql = """
                 SELECT 
                     id, 
@@ -180,10 +185,11 @@ def get_pending_tasks() -> List[Dict]:
             """
             cursor.execute(sql)
             tasks = cursor.fetchall()
-            print(f"✅ 查询到 {len(tasks)} 个待处理任务（user_change/review_change/pending）")
-            return tasks
+            return tasks if tasks else []
     except Exception as e:
-        print(f"❌ 数据库查询失败: {e}")
+        print(f"[ERROR] 数据库查询失败: {e}")
+        import traceback
+        traceback.print_exc()
         return []
     finally:
         if connection:
@@ -192,7 +198,9 @@ def get_pending_tasks() -> List[Dict]:
 def update_task_status(task_id: str, status: str, retry_count: int = None, error_message: str = None) -> bool:
     """
     更新任务状态
-    status: 'pending', 'processing', 'review', 'user_change', 'review_change', 'ready_to_send', 'sent', 'failed'
+    status: 
+      - 基础流转：'pending', 'processing', 'review', 'user_change', 'review_change', 'ready_to_send', 'sent', 'failed'
+      - 自检扩展：'implementing', 'self_check_failed', 'waiting_for_fix'
     retry_count: 重试次数（可选）
     error_message: 错误信息（可选，用于记录失败原因）
     """
@@ -219,10 +227,9 @@ def update_task_status(task_id: str, status: str, retry_count: int = None, error
                     pass  # 如果字段不存在，忽略
             
             connection.commit()
-            print(f"✅ 任务 {task_id} 状态已更新为: {status}" + (f", 重试次数: {retry_count}" if retry_count is not None else ""))
             return True
     except Exception as e:
-        print(f"❌ 更新任务状态失败: {e}")
+        print(f"[ERROR] 更新任务状态失败: {e}")
         if connection:
             try:
                 connection.rollback()

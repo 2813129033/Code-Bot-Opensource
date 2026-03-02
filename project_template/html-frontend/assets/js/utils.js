@@ -20,7 +20,8 @@ if (typeof axios !== 'undefined') {
     // 请求拦截器
     axios.interceptors.request.use(
         config => {
-            // 可以在这里添加token等认证信息
+            // 开发规范提示：如果你在跨域请求里加了自定义请求头（包括 Authorization），后端必须在 CORS allowedHeaders 里声明，否则预检会失败
+            // 可以在这里添加 token 等认证信息
             const token = localStorage.getItem('token');
             if (token) {
                 config.headers.Authorization = `Bearer ${token}`;

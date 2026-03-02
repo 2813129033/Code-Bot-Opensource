@@ -25,7 +25,7 @@ const appConfig = {
 
   // Coze 对话流配置
   const cozeConfig = {
-	access_token: 'pat_4JtpHLaA9vZ6jPZAtCnbcwS6tiH18bf5E52zvSF9JbppIcPKZpdDvIPr6deVs990',
+	access_token: 'testtoken',
 	base_url: 'https://api.coze.cn',
 	workflow_id: '7560718083158065178' // 对话流 ID
   };

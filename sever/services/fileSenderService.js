@@ -46,60 +46,36 @@ async function getCompletedTasks() {
 /**
  * 检查压缩包文件是否存在
  * 支持多个查找路径，按优先级查找
+ * @param {string} taskId - 任务ID（用于查找对应的压缩包）
  */
-function checkZipFileExists(userId) {
-  const zipFileName = `${userId}.zip`;
-  
-  // 添加调试信息
-  console.log(`[fileSenderService] 检查压缩包文件:`);
-  console.log(`  userId: ${userId}`);
-  console.log(`  查找文件名: ${zipFileName}`);
-  console.log(`  查找路径列表: ${ZIP_SEARCH_PATHS.join(', ')}`);
+function checkZipFileExists(taskId) {
+  if (!taskId) {
+    return null;
+  }
+  const zipFileName = `${taskId}.zip`;
   
   // 按优先级在多个路径中查找
   for (const searchPath of ZIP_SEARCH_PATHS) {
     const zipFilePath = path.join(searchPath, zipFileName);
     
-    console.log(`  🔍 尝试路径: ${zipFilePath}`);
-    
     if (fs.existsSync(zipFilePath)) {
-      console.log(`  ✅ 找到压缩包: ${zipFilePath}`);
       return zipFilePath;
-    } else {
-      console.log(`  ❌ 文件不存在`);
-      
-      // 如果目录存在，列出目录下的文件（帮助调试）
-      if (fs.existsSync(searchPath)) {
-        try {
-          const dirFiles = fs.readdirSync(searchPath);
-          const zipFiles = dirFiles.filter(f => f.endsWith('.zip'));
-          if (zipFiles.length > 0) {
-            console.log(`  📦 该目录下的zip文件: ${zipFiles.join(', ')}`);
-          }
-        } catch (err) {
-          console.log(`  ⚠️  无法读取目录: ${err.message}`);
-        }
-      } else {
-        console.log(`  ⚠️  目录不存在: ${searchPath}`);
-      }
     }
   }
   
-  // 所有路径都找不到，尝试模糊匹配（查找包含userId的zip文件）
-  console.log(`  🔍 尝试模糊匹配（查找包含 ${userId} 的zip文件）...`);
+  // 所有路径都找不到，尝试模糊匹配（查找包含taskId的zip文件）
   for (const searchPath of ZIP_SEARCH_PATHS) {
     if (!fs.existsSync(searchPath)) continue;
     
     try {
       const dirFiles = fs.readdirSync(searchPath);
       const matchingZips = dirFiles.filter(f => 
-        f.endsWith('.zip') && f.includes(userId)
+        f.endsWith('.zip') && f.includes(taskId)
       );
       
       if (matchingZips.length > 0) {
         const matchedFile = matchingZips[0];
         const matchedPath = path.join(searchPath, matchedFile);
-        console.log(`  ✅ 模糊匹配找到: ${matchedPath}`);
         return matchedPath;
       }
     } catch (err) {
@@ -107,7 +83,6 @@ function checkZipFileExists(userId) {
     }
   }
   
-  console.log(`  ❌ 在所有路径中都未找到压缩包`);
   return null;
 }
 
@@ -143,7 +118,7 @@ async function sendFileToUser(userId, filePath, taskInfo) {
         message: textMessage
       });
     } catch (textErr) {
-      console.warn('[fileSenderService] 发送文本消息失败:', textErr.message);
+      // 发送文本消息失败，继续尝试发送文件
     }
 
     // 尝试方式1：使用CQ码发送本地文件（NapCat可能支持）
@@ -157,11 +132,10 @@ async function sendFileToUser(userId, filePath, taskInfo) {
       });
       
       if (response.data && (response.data.retcode === 0 || response.data.status === 'ok')) {
-        console.log(`[fileSenderService] 文件通过CQ码发送成功: ${fileName}`);
         return { success: true };
       }
     } catch (cqErr) {
-      console.warn('[fileSenderService] CQ码方式发送失败，尝试上传方式:', cqErr.message);
+      // CQ码方式发送失败，尝试上传方式
     }
 
     // 尝试方式2：上传文件到NapCat（如果支持upload_private_file API）
@@ -188,12 +162,11 @@ async function sendFileToUser(userId, filePath, taskInfo) {
             user_id: parseInt(userId) || userId,
             message: `[CQ:file,file=${fileId}]`
           });
-          console.log(`[fileSenderService] 文件上传并发送成功: ${path.basename(filePath)}`);
           return { success: true };
         }
       }
     } catch (uploadErr) {
-      console.warn('[fileSenderService] 文件上传方式失败:', uploadErr.message);
+      // 文件上传方式失败
     }
 
     // 方式3：如果都失败，发送文件路径信息（备用方案）
@@ -264,20 +237,15 @@ async function checkNapCatConnection() {
  */
 async function scanAndSendFiles() {
   try {
-    console.log('[fileSenderService] 开始扫描已完成的任务...');
-    
     // 检查 NapCat 连接
     const connectionCheck = await checkNapCatConnection();
     if (!connectionCheck.available) {
-      console.warn(`[fileSenderService] ⚠️ ${connectionCheck.error}`);
-      console.warn(`[fileSenderService] 跳过本次扫描，等待 NapCat 启动...`);
       return { scanned: 0, sent: 0, failed: 0, warning: connectionCheck.error };
     }
     
     const completedTasks = await getCompletedTasks();
     
     if (completedTasks.length === 0) {
-      console.log('[fileSenderService] 没有已完成的任务');
       return { scanned: 0, sent: 0, failed: 0 };
     }
 
@@ -293,23 +261,18 @@ async function scanAndSendFiles() {
         continue;
       }
 
-      // 检查压缩包是否存在
-      const zipFilePath = checkZipFileExists(userId);
+      // 检查压缩包是否存在（使用 taskId 而不是 userId）
+      const zipFilePath = checkZipFileExists(taskId);
       if (!zipFilePath) {
-        console.log(`[fileSenderService] 任务 ${taskId} 的压缩包不存在`);
-        console.log(`  期望文件名: ${userId}.zip`);
-        console.log(`  查找路径: ${ZIP_SEARCH_PATHS.join(', ')}`);
         continue;
       }
 
       // 发送文件
-      console.log(`[fileSenderService] 正在发送任务 ${taskId} 的压缩包给用户 ${userId}...`);
       const result = await sendFileToUser(userId, zipFilePath, task);
       
       if (result.success) {
         await markTaskAsSent(taskId);
         sentCount++;
-        console.log(`[fileSenderService] ✅ 任务 ${taskId} 的压缩包已发送给用户 ${userId}`);
       } else {
         failedCount++;
         // 如果是连接错误，给出更友好的提示
@@ -324,7 +287,6 @@ async function scanAndSendFiles() {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    console.log(`[fileSenderService] 扫描完成: 已发送 ${sentCount} 个，失败 ${failedCount} 个`);
     return { scanned: completedTasks.length, sent: sentCount, failed: failedCount };
   } catch (err) {
     console.error('[fileSenderService][scanAndSendFiles]', err);

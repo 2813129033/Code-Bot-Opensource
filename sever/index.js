@@ -13,13 +13,17 @@ let scanTimer = null;
  * 启动定时扫描任务
  */
 function startFileScanTask() {
-  console.log(`[fileScan] 定时扫描任务已启动，间隔: ${SCAN_INTERVAL / 1000} 秒`);
-  
   // 立即执行一次
   scanAndSendFiles();
   
-  // 设置定时任务
+  // 设置定时任务：保持 30 秒一次的间隔，但只在每天早上 6:00-7:00 这一小时内真正执行
   scanTimer = setInterval(() => {
+    const now = new Date();
+    const hour = now.getHours();
+    if (hour < 6 || hour >= 7) {
+      // 非 6:00-7:00 时段，仅保持心跳，不执行扫描，几乎不占用资源
+      return;
+    }
     scanAndSendFiles();
   }, SCAN_INTERVAL);
 }
@@ -31,7 +35,6 @@ function stopFileScanTask() {
   if (scanTimer) {
     clearInterval(scanTimer);
     scanTimer = null;
-    console.log('[fileScan] 定时扫描任务已停止');
   }
 }
 
@@ -41,9 +44,6 @@ function stopFileScanTask() {
 async function scanAndSendFiles() {
   try {
     const result = await fileSenderService.scanAndSendFiles();
-    if (result.scanned > 0) {
-      console.log(`[fileScan] 扫描结果: 扫描 ${result.scanned} 个任务，发送 ${result.sent} 个，失败 ${result.failed} 个`);
-    }
   } catch (err) {
     console.error('[fileScan] 扫描任务执行失败:', err);
   }
@@ -51,10 +51,7 @@ async function scanAndSendFiles() {
 
 async function start() {
   try {
-    console.log(`[server] starting in ${appConfig.env}...`);
-
     const db = await initDB();
-    console.log('[db] ready:', { ok: true });
 
 	// 解析 JSON 请求体
 	app.use(express.json());
@@ -70,7 +67,6 @@ async function start() {
 	app.use('/', messageRoutes);
 
     app.listen(appConfig.port, () => {
-      console.log(`🚀 Server running on port ${appConfig.port}`);
     });
 
     // 启动定时扫描任务
@@ -78,13 +74,11 @@ async function start() {
 
     // 优雅关闭
     process.on('SIGINT', () => {
-      console.log('\n[server] 收到退出信号，正在关闭...');
       stopFileScanTask();
       process.exit(0);
     });
 
     process.on('SIGTERM', () => {
-      console.log('\n[server] 收到终止信号，正在关闭...');
       stopFileScanTask();
       process.exit(0);
     });

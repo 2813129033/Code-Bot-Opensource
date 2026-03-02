@@ -8,10 +8,6 @@ const { cozeConfig } = require('../config/config');
  */
 async function getChatReply(message) {
   try {
-    console.log(`💬 调用 Coze AI: "${message}"`);
-    console.log(`🔍 使用配置: workflow_id=${cozeConfig.workflow_id}, base_url=${cozeConfig.base_url}`);
-    console.log(`🔍 access_token 前30位: ${cozeConfig.access_token.substring(0, 30)}...`);
-    
     // 直接发送原始消息，不需要包装成 JSON 格式（不做记忆功能）
     // 注意：不使用 validateStatus，让 axios 使用默认行为（4xx/5xx 会抛出异常）
     const response = await axios.post(
@@ -66,7 +62,6 @@ async function getChatReply(message) {
 
       response.data.on('end', () => {
         if (fullReply) {
-          console.log(`✅ AI 回复: ${fullReply.substring(0, 100)}${fullReply.length > 100 ? '...' : ''}`);
           resolve(fullReply);
         } else {
           resolve('抱歉，我现在有点忙，稍后再聊吧~');

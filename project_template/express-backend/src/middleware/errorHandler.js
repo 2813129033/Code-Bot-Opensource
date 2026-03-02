@@ -1,5 +1,6 @@
 const errorHandler = (err, req, res, next) => {
   const logger = require('../utils/logger');
+  const config = require('../config');
   
   // 记录错误日志
   logger.error('Error occurred:', {
@@ -32,7 +33,7 @@ const errorHandler = (err, req, res, next) => {
     success: false,
     message: message,
     code: err.code || 'INTERNAL_ERROR',
-    ...(process.env.NODE_ENV === 'development' && {
+    ...(config.server.env === 'development' && {
       stack: err.stack,
       error: err
     })

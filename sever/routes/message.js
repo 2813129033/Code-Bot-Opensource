@@ -9,8 +9,9 @@ const inviteService = require('../services/inviteService');
 
 // 项目类型及定价配置
 const PROJECT_PRODUCTS = {
-  'H5开发': { price: 200 },
-  'APP开发': { price: 400 }
+  '网站开发': { price: 688 },
+  '小程序开发': { price: 788 },
+  'APP开发': { price: 888 }
 };
 
 function decodeHtmlEntities(text = '') {
@@ -57,13 +58,6 @@ router.post('/', async (req, res) => {
     const body = req.body || {};
     const normalized = normalizeEvent(body);
 
-    console.log('[message][incoming]', {
-      from: normalized.groupId ? 'group' : 'private',
-      userId: normalized.userId,
-      groupId: normalized.groupId,
-      text: normalized.rawMessage
-    });
-
     if (normalized.eventType !== 'message') {
       return res.json({});
     }
@@ -101,12 +95,17 @@ router.post('/', async (req, res) => {
               `6️⃣ 开始抽奖\n` +
               `7️⃣ 加盟赚钱\n` +
               `8️⃣ 修改我的项目\n` +
+              `9️⃣ 提现\n` +
+              `🔟 充值\n` +
+              `1️⃣1️⃣ 咸鱼购买\n` +
               `═════════════════════\n` +
               `💰 当前余额：¥${wallet ? Number(wallet.balance).toFixed(2) : '0.00'}\n` +
               `🎫 邀请码：${inviteInfo ? inviteInfo.code : '未生成'}\n` +
-              `🎲 抽奖次数：${lotteryInfo ? lotteryInfo.remaining : 0}/2`
+              `🎲 抽奖次数：${lotteryInfo ? lotteryInfo.remaining : 0}/2\n` +
+              `📌 系统仅供学习使用`
           });
         } catch (e) {
+          console.error('[menu] 获取菜单信息失败:', e && (e.stack || e.message || e));
           return res.json({ reply: '❌ 获取菜单信息失败，请稍后再试。' });
         }
       }
@@ -155,8 +154,7 @@ router.post('/', async (req, res) => {
             return res.json({
               reply:
                 `✅ 绑定成功！\n` +
-                `邀请码：${result.code}\n` +
-                `现在可发送 "开始抽奖" 开始抽奖（最多 2 次）。`
+                `已绑定邀请码：${result.code}\n`
             });
           } catch (e) {
             return res.json({ reply: '❌ 绑定失败，请稍后再试。' });
@@ -170,9 +168,14 @@ router.post('/', async (req, res) => {
           return res.json({ reply: '您已有任务在进行中，请先完成当前任务或等待完成。' });
         }
         const taskId = taskService.startTask(userId);
-        console.log(`[task] 用户 ${userId} 开始任务录入，任务ID: ${taskId}`);
         return res.json({ 
-          reply: '请选择项目类型并确保余额充足：\n1：H5 开发（¥200）\n2：APP 开发（¥400）' 
+          reply: 
+            '📌 项目都是独一无二的，不用担心版权问题。\n\n' +
+            '请选择项目类型并确保余额充足：\n' +
+            '1：网站开发（¥688）\n' +
+            '2：小程序开发（¥788）\n' +
+            '3：APP开发（¥888）\n\n' +
+            '🤖 给项目定制 AI 功能，联系微信：Tangle-01'
         });
       }
 
@@ -185,6 +188,18 @@ router.post('/', async (req, res) => {
         } catch (e) {
           return res.json({ reply: '❌ 查询余额失败，请稍后再试。' });
         }
+      }
+
+      if (message === '充值') {
+        return res.json({
+          reply: '充值直接给我转账即可，如需系统实名信息，姓：张'
+        });
+      }
+
+      if (message === '提现') {
+        return res.json({
+          reply: '构建项目以后可以提现，请截图构建项目转账记录，添加微信 Tangle-01'
+        });
       }
 
       if (message === '论文小助手') {
@@ -258,6 +273,12 @@ router.post('/', async (req, res) => {
         }
       }
 
+      if (message === '咸鱼购买' || message === '闲鱼购买') {
+        return res.json({
+          reply: '【闲鱼】https://m.tb.cn/h.iZdNzGs?tk=7yjSUqJKOOE CZ005 「我在闲鱼发布了【APP网站小程序开发包更新】」\n\n点击链接直接打开\n\n⚠️ 注：咸鱼购买的用户参加不了抽奖活动'
+        });
+      }
+
       // 处理修改项目：选择任务ID
       const userState = taskService.getUserState(userId);
       if (userState.step === 'WAIT_MODIFY_TASK_ID' && userState.action === 'modify_project') {
@@ -325,14 +346,7 @@ router.post('/', async (req, res) => {
       const amountSource = transfer.amount || transfer.pay_msg || normalized.rawMessage;
       const amount = walletService.parseAmount(amountSource);
 
-      console.log('[payment][transfer]', {
-        userId,
-        amount,
-        raw: transfer
-      });
-
       if (!amount || amount <= 0) {
-        console.warn('[payment] ⚠️ 无法解析转账金额，忽略此次事件');
         return res.json({});
       }
 
@@ -354,8 +368,6 @@ router.post('/', async (req, res) => {
         }).catch(err => {
           console.error('[payment] ❌ 发送转账提醒失败:', err.message);
         });
-
-        console.log('[payment] ✅ 转账记录成功');
       } catch (error) {
         console.error('[payment] ❌ 转账记录异常:', error);
       }
@@ -371,7 +383,7 @@ router.post('/', async (req, res) => {
     if (userState.step === taskService.STEPS.WAIT_TYPE) {
       const result = taskService.handleTypeSelection(userId, message);
       if (!result.success) {
-        return res.json({ reply: result.error || '请选择1、2或3' });
+        return res.json({ reply: result.error || '请选择 1、2 或 3' });
       }
 
       const currentState = taskService.getUserState(userId);
@@ -379,7 +391,7 @@ router.post('/', async (req, res) => {
 
       if (!product) {
         taskService.clearUserState(userId);
-        return res.json({ reply: '暂不支持该项目类型，请重新输入 "开始构建项目" 选择 1-2。' });
+        return res.json({ reply: '暂不支持该项目类型，请重新输入 "开始构建项目" 选择 1-3。' });
       }
 
       try {
@@ -403,7 +415,7 @@ router.post('/', async (req, res) => {
         });
 
         return res.json({ 
-          reply: `✅ 已扣款 ¥${product.price.toFixed(2)}（${currentState.taskType}），当前余额 ¥${deductResult.balance.toFixed(2)}。\n技术选型是什么？请输入项目语言和数据库（例如：Node.js + MySQL）。` 
+          reply: `✅ 已扣款 ¥${product.price.toFixed(2)}（${currentState.taskType}），当前余额 ¥${deductResult.balance.toFixed(2)}。\n\n请说出您的技术选型，语言，数据库等必须要使用的技术，如果没有请回复“无”。` 
         });
       } catch (error) {
         console.error('[payment] ❌ 扣款错误:', error);
@@ -415,10 +427,10 @@ router.post('/', async (req, res) => {
     if (userState.step === taskService.STEPS.WAIT_TECH) {
       const result = taskService.handleTechSelection(userId, message);
       if (!result.success) {
-        return res.json({ reply: result.error || '请输入技术选型' });
+        return res.json({ reply: result.error || '请说出您的技术选型，语言，数据库等必须要使用的技术，如果没有请回复“无”。' });
       }
       return res.json({ 
-        reply: '请说出您项目的功能描述，也可以在此处补充技术选型' 
+        reply: '请描述项目是什么样子的，哪些功能是必须有的，如果没有描述到的地方系统也会按照正常逻辑写完整。' 
       });
     }
 
@@ -430,8 +442,6 @@ router.post('/', async (req, res) => {
 
       const completeResult = await taskService.completeTask(userId);
       if (completeResult.success) {
-        console.log(`[task] 用户 ${userId} 任务录入完成，任务ID: ${completeResult.taskId}`);
-
         return res.json({
           reply: `✅ 任务录入成功！\n任务ID：${completeResult.taskId}\n项目类型：${result.state.taskType}\n技术选型：${result.state.taskTechnology}\n功能描述：${result.state.taskDescription}`,
         });
@@ -459,9 +469,6 @@ router.post('/', async (req, res) => {
             user_id: userId,
             message: reply + '\n（发送"菜单"查看AI助手选项）'
           });
-        })
-        .then(() => {
-          console.log(`[message] ✅ AI回复已发送给用户 ${userId}`);
         })
         .catch(error => {
           console.error('[message] ❌ AI调用或发送失败:', error.message);

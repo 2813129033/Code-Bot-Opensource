@@ -18,7 +18,12 @@
 
 		},
 		methods: {
-
+			// 可选：对接 express-backend（JWT/上传/用户/健康检查）
+			// 1) 先修改 common/config.js 里的 baseURL
+			// 2) 再在 pages.json 注册 pages/backend/* 页面（示例见 README）
+			// 3) 或在任意页面里直接调用：
+			//    import { api } from '@/common/api'
+			//    const res = await api.health()
 		}
 	}
 </script>

@@ -51,8 +51,51 @@ class TaskQueue:
                         self.tasks.append(task)
                         added_count += 1
             
-            if added_count > 0:
-                print(f"📥 扫描到 {added_count} 个新任务，已加入队列")
+            return added_count
+    
+    def top_up_tasks(self, max_total: int = 10) -> int:
+        """
+        从数据库补充任务到队列
+        目标：让「待处理任务数量」最多达到 max_total，多余的不再加入。
+        - 如果当前待处理任务 >= max_total，则不做任何事。
+        - 否则从数据库获取待处理任务，按需补充，避免重复和已处理过的任务。
+        """
+        # 先在锁内读一遍当前待处理数量
+        with self.lock:
+            pending = max(0, len(self.tasks) - self.current_index)
+        if pending >= max_total:
+            return 0
+
+        # 查询数据库中的待处理任务
+        new_tasks = get_pending_tasks()
+        if not new_tasks:
+            return 0
+
+        with self.lock:
+            # 再次计算，避免这段时间队列发生变化
+            pending = max(0, len(self.tasks) - self.current_index)
+            need = max_total - pending
+            if need <= 0:
+                return 0
+
+            added_count = 0
+            for task in list(new_tasks):
+                task_id = task.get('task_id', '')
+                if not task_id:
+                    continue
+                # 跳过已处理过的任务
+                if task_id in self.processed_task_ids:
+                    continue
+                # 跳过已经在队列中的任务，避免重复
+                if any(t.get('task_id') == task_id for t in self.tasks):
+                    continue
+
+                self.tasks.append(task)
+                added_count += 1
+
+                if added_count >= need:
+                    break
+
             return added_count
     
     def get_next_task(self) -> Optional[Dict]:
@@ -124,6 +167,10 @@ class TaskQueue:
         """标记任务为处理中"""
         return update_task_status(task_id, 'processing')
 
+    def mark_task_implementing(self, task_id: str) -> bool:
+        """标记任务为代码实现中（GUI 自动化正在写代码）"""
+        return update_task_status(task_id, 'implementing')
+
     def mark_task_completed(self, task_id: str) -> bool:
         """标记任务为已完成（保留接口，但当前工作流不再直接使用 completed）"""
         return update_task_status(task_id, 'completed')
@@ -135,6 +182,14 @@ class TaskQueue:
     def mark_task_failed(self, task_id: str, error_message: str = None) -> bool:
         """标记任务为失败"""
         return update_task_status(task_id, 'failed', error_message=error_message)
+
+    def mark_task_self_check_failed(self, task_id: str, error_message: str = None) -> bool:
+        """标记任务为自检未通过（会记录失败原因，自检可多轮进行）"""
+        return update_task_status(task_id, 'self_check_failed', error_message=error_message)
+
+    def mark_task_waiting_for_fix(self, task_id: str, error_message: str = None) -> bool:
+        """标记任务为等待后续人工/AI 修复（不再依赖《未完成模块汇总》这种静态自检文档）"""
+        return update_task_status(task_id, 'waiting_for_fix', error_message=error_message)
     
     def mark_task_retry(self, task_id: str, retry_count: int, error_message: str = None) -> bool:
         """标记任务需要重试，更新重试次数并重置状态为 pending"""

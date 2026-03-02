@@ -1,5 +1,6 @@
 const redis = require('redis');
 const logger = require('../utils/logger');
+const config = require('./index');
 
 let client = null;
 
@@ -10,8 +11,8 @@ const createClient = () => {
 
   client = redis.createClient({
     socket: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT) || 6379,
+      host: config.redis.host,
+      port: config.redis.port,
       reconnectStrategy: (retries) => {
         if (retries > 10) {
           logger.error('Redis: Too many reconnection attempts');
@@ -20,11 +21,11 @@ const createClient = () => {
         return Math.min(retries * 50, 1000);
       }
     },
-    password: process.env.REDIS_PASSWORD || undefined,
-    database: parseInt(process.env.REDIS_DB) || 0
+    password: config.redis.password || undefined,
+    database: config.redis.db
   });
 
-  const keyPrefix = process.env.REDIS_KEY_PREFIX || 'app:';
+  const keyPrefix = config.redis.keyPrefix;
 
   // 错误处理
   client.on('error', (err) => {
@@ -80,7 +81,7 @@ const redisUtils = {
         logger.warn('Redis client not available');
         return false;
       }
-      const fullKey = `${process.env.REDIS_KEY_PREFIX || 'app:'}${key}`;
+      const fullKey = `${config.redis.keyPrefix}${key}`;
       if (expireSeconds) {
         await client.setEx(fullKey, expireSeconds, JSON.stringify(value));
       } else {
@@ -100,7 +101,7 @@ const redisUtils = {
       if (!client || !client.isOpen) {
         return null;
       }
-      const fullKey = `${process.env.REDIS_KEY_PREFIX || 'app:'}${key}`;
+      const fullKey = `${config.redis.keyPrefix}${key}`;
       const value = await client.get(fullKey);
       return value ? JSON.parse(value) : null;
     } catch (error) {
@@ -116,7 +117,7 @@ const redisUtils = {
       if (!client || !client.isOpen) {
         return false;
       }
-      const fullKey = `${process.env.REDIS_KEY_PREFIX || 'app:'}${key}`;
+      const fullKey = `${config.redis.keyPrefix}${key}`;
       await client.del(fullKey);
       return true;
     } catch (error) {
@@ -132,7 +133,7 @@ const redisUtils = {
       if (!client || !client.isOpen) {
         return false;
       }
-      const fullKey = `${process.env.REDIS_KEY_PREFIX || 'app:'}${key}`;
+      const fullKey = `${config.redis.keyPrefix}${key}`;
       const result = await client.exists(fullKey);
       return result === 1;
     } catch (error) {
@@ -148,7 +149,7 @@ const redisUtils = {
       if (!client || !client.isOpen) {
         return false;
       }
-      const fullKey = `${process.env.REDIS_KEY_PREFIX || 'app:'}${key}`;
+      const fullKey = `${config.redis.keyPrefix}${key}`;
       await client.expire(fullKey, seconds);
       return true;
     } catch (error) {
@@ -164,7 +165,7 @@ const redisUtils = {
       if (!client || !client.isOpen) {
         return -1;
       }
-      const fullKey = `${process.env.REDIS_KEY_PREFIX || 'app:'}${key}`;
+      const fullKey = `${config.redis.keyPrefix}${key}`;
       return await client.ttl(fullKey);
     } catch (error) {
       logger.error('Redis ttl error:', error);

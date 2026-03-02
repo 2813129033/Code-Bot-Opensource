@@ -120,11 +120,10 @@ async function bindInviteCode(inviteeQq, codeInput) {
 }
 
 function pickPrize() {
-  // 100:50%, 200:40%, 300:10%
-  const r = Math.random() * 100;
-  if (r < 50) return 100;
-  if (r < 90) return 200;
-  return 300;
+  // 每次随机金额：70 ~ 100（含），均匀分布
+  const min = 70;
+  const max = 100;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 async function drawLottery(qqNumber) {
@@ -137,25 +136,36 @@ async function drawLottery(qqNumber) {
   try {
     await conn.beginTransaction();
 
-    // 检查当前用户是否是邀请码所有者（即有人绑定了他的邀请码）
+    // 检查当前用户是否是邀请码所有者，并统计被绑定次数
     const [bindingRows] = await conn.execute(
-      'SELECT code FROM invite_bindings WHERE inviter_qq_number = ? FOR UPDATE',
+      'SELECT code, COUNT(*) AS bind_cnt FROM invite_bindings WHERE inviter_qq_number = ? GROUP BY code FOR UPDATE',
       [qq]
     );
-    if (!bindingRows.length) {
+    if (!bindingRows.length || !bindingRows[0].bind_cnt) {
       await conn.rollback();
       return { success: false, error: 'NOT_BOUND' };
     }
-    // 使用第一个绑定的邀请码（如果有多个，使用第一个）
-    const code = String(bindingRows[0].code);
+    // 取绑定次数最多的那条（兼容 ONLY_FULL_GROUP_BY）
+    const best = bindingRows
+      .map(r => ({ code: r.code, bind_cnt: parseInt(r.bind_cnt, 10) || 0 }))
+      .sort((a, b) => b.bind_cnt - a.bind_cnt)[0];
 
-    // 邀请码所有者最多抽 2 次（对应最多2个人绑定他的邀请码）
+    const code = String(best.code);
+    const bindCnt = best.bind_cnt;
+
+    // 每被绑定 1 次获得 1 次抽奖机会，总机会数 = min(绑定人数, 2)
+    // 例如：
+    //  - 绑定 1 人 → 总共 1 次机会
+    //  - 绑定 2 人及以上 → 总共最多 2 次机会
+    const maxDrawTimes = Math.min(bindCnt, 2);
+
+    // 查询当前已抽奖次数
     const [drawCntRows] = await conn.execute(
       'SELECT COUNT(1) AS cnt FROM lottery_draws WHERE qq_number = ? FOR UPDATE',
       [qq]
     );
     const drawCnt = parseInt(drawCntRows[0]?.cnt, 10) || 0;
-    if (drawCnt >= 2) {
+    if (drawCnt >= maxDrawTimes) {
       await conn.rollback();
       return { success: false, error: 'DRAW_LIMIT' };
     }
@@ -167,7 +177,12 @@ async function drawLottery(qqNumber) {
     );
 
     await conn.commit();
-    return { success: true, prize, code, remaining: 1 - drawCnt };
+    return {
+      success: true,
+      prize,
+      code,
+      remaining: Math.max(0, maxDrawTimes - drawCnt - 1)
+    };
   } catch (e) {
     await conn.rollback();
     throw e;
@@ -185,15 +200,19 @@ async function getUserLotteryInfo(qqNumber) {
   try {
     await conn.beginTransaction();
 
-    // 检查是否有人绑定了当前用户的邀请码（即当前用户是否是邀请码所有者）
+    // 检查是否有人绑定了当前用户的邀请码，并统计绑定次数
     const [bindingRows] = await conn.execute(
-      'SELECT code FROM invite_bindings WHERE inviter_qq_number = ? FOR UPDATE',
+      'SELECT code, COUNT(*) AS bind_cnt FROM invite_bindings WHERE inviter_qq_number = ? GROUP BY code FOR UPDATE',
       [qq]
     );
-    if (!bindingRows.length) {
+    if (!bindingRows.length || !bindingRows[0].bind_cnt) {
       await conn.rollback();
       return null; // 没有人绑定他的邀请码
     }
+    const best = bindingRows
+      .map(r => ({ code: r.code, bind_cnt: parseInt(r.bind_cnt, 10) || 0 }))
+      .sort((a, b) => b.bind_cnt - a.bind_cnt)[0];
+    const bindCnt = best.bind_cnt;
 
     // 获取抽奖次数
     const [drawCntRows] = await conn.execute(
@@ -202,10 +221,14 @@ async function getUserLotteryInfo(qqNumber) {
     );
     const drawCnt = parseInt(drawCntRows[0]?.cnt, 10) || 0;
 
+    const maxDrawTimes = Math.min(bindCnt, 2);
+    const remaining = Math.max(0, maxDrawTimes - drawCnt);
+
     await conn.commit();
     return {
-      code: bindingRows[0].code,
-      remaining: 2 - drawCnt, // 最多2次
+      code: best.code,
+      // 每被绑定一次获得一次机会，总机会不超过 2 次
+      remaining,
       drawCount: drawCnt
     };
   } catch (e) {

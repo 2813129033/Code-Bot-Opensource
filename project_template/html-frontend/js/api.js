@@ -32,6 +32,7 @@ async function request(url, options = {}) {
     // 添加token（如果存在）
     const token = window.utils?.storage.get('token');
     if (token) {
+        // 开发规范提示：Authorization 属于自定义头；跨域时后端 CORS 需要把 Authorization 加进 allowedHeaders
         requestHeaders['Authorization'] = `Bearer ${token}`;
     }
 

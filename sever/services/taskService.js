@@ -75,13 +75,14 @@ function handleTypeSelection(userId, message) {
   }
 
   const typeMap = {
-    '1': 'H5开发',
-    '2': 'APP开发'
+    '1': '网站开发',
+    '2': '小程序开发',
+    '3': 'APP开发'
   };
 
   const selectedType = typeMap[message.trim()];
   if (!selectedType) {
-    return { success: false, error: '请选择 1 或 2' };
+    return { success: false, error: '请选择 1、2 或 3' };
   }
 
   setUserState(userId, {

@@ -3,8 +3,10 @@ const DailyRotateFile = require('winston-daily-rotate-file');
 const path = require('path');
 const fs = require('fs');
 
+const config = require('../config');
+
 // 确保日志目录存在
-const logDir = process.env.LOG_DIR || 'logs';
+const logDir = config.log.dir;
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
@@ -32,7 +34,7 @@ const consoleFormat = winston.format.combine(
 
 // 创建logger实例
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: config.log.level,
   format: logFormat,
   defaultMeta: { service: 'express-backend' },
   transports: [
@@ -41,23 +43,23 @@ const logger = winston.createLogger({
       filename: path.join(logDir, 'error-%DATE%.log'),
       datePattern: 'YYYY-MM-DD',
       level: 'error',
-      maxSize: process.env.LOG_MAX_SIZE || '20m',
-      maxFiles: process.env.LOG_MAX_FILES || '14d',
+      maxSize: config.log.maxSize,
+      maxFiles: config.log.maxFiles,
       format: logFormat
     }),
     // 所有日志文件
     new DailyRotateFile({
       filename: path.join(logDir, 'combined-%DATE%.log'),
       datePattern: 'YYYY-MM-DD',
-      maxSize: process.env.LOG_MAX_SIZE || '20m',
-      maxFiles: process.env.LOG_MAX_FILES || '14d',
+      maxSize: config.log.maxSize,
+      maxFiles: config.log.maxFiles,
       format: logFormat
     })
   ]
 });
 
 // 开发环境添加控制台输出
-if (process.env.NODE_ENV !== 'production') {
+if (config.server.env !== 'production') {
   logger.add(new winston.transports.Console({
     format: consoleFormat
   }));

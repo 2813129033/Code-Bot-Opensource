@@ -116,6 +116,25 @@ document.getElementById('myForm').addEventListener('submit', async (e) => {
 </script>
 ```
 
+### （可选）对接 express-backend 模板（JWT / 用户 / 上传 / 健康检查）
+
+本模板提供一个**可选**的配套模块：`assets/js/backend.js`（默认不启用）。
+
+- 启用方式：在页面底部取消注释下面这一行即可（以 `index.html` 为例）：
+
+```html
+<!-- <script src="assets/js/backend.js"></script> -->
+```
+
+- 可用方法（挂在 `window.Backend`）：
+  - `Backend.health()`：GET `/health`
+  - `Backend.register({ username, email, password })`
+  - `Backend.login({ username, password })`（成功会把 `token` 存到 `localStorage`）
+  - `Backend.me()`
+  - `Backend.listUsers({ page, limit })`
+  - `Backend.uploadImage(file)`
+  - `Backend.uploadVideo(file)`
+
 ## 包含的组件
 
 - 响应式导航栏
