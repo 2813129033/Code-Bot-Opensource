@@ -137,3 +137,9 @@ LLM API（OpenAI / Claude / 本地模型）
 
 如果你正在读到这里，
 那这个项目已经比昨天更有意义了一点。
+
+
+
+![PAY](https://github.com/user-attachments/assets/d938b94d-0c67-47fa-bac8-2e9d8e37fc01)
+
+
